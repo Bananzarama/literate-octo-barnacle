@@ -63,7 +63,7 @@ def scrape_tld(server: str, port: int, timeout=3):
                 count += 1
                 time.sleep(.0001)
                 progressBar(count, len(tldList))
-            output.write("TLDs Found: " + count)
+            output.write("TLDs Found: " + str(count))
     else:
         print('Goodbye!')
         return (1)
