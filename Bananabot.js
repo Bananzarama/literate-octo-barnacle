@@ -1,5 +1,6 @@
 const { Client, Events, GatewayIntentBits } = require("discord.js");
 const winston = require('winston');
+const { combine, timestamp, printf, colorize, align } = winston.format;
 const { clientId, token, author } = require('./config.json');
 const client = new Client({
         intents: [
@@ -18,9 +19,16 @@ const uri = "mongodb://127.0.0.1:27017/bananabot";
 let db;
 
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(winston.format.timestamp(),winston.format.cli()),
-  defaultMeta: { service: 'user-service' },
+  level: 'info',
+  format: combine(    
+      colorize({ all: true }),
+      timestamp({
+      format: 'YYYY-MM-DD hh:mm:ss.SSS A',
+      }),
+      align(),
+      printf((info) => `[${info.timestamp}] ${info.level}: ${info.message}`)
+  ),
+  defaultMeta: { service: 'Bananabot-Discord' },
   transports: [
     new winston.transports.File({ filename: 'error.log', level: 'error' }),
     new winston.transports.File({ filename: 'combined.log' }),
@@ -70,8 +78,9 @@ client.once("ready", async () => {
 });
 
 client.on("messageCreate", async (message) => {
-  if (message.author.bot) return;
-  if (message.system) return;
+  if (message.author.bot || !message.system) {
+    return;
+  }
   if (message.content.includes("banana")) {
     const count = await updateCounter(1)
       .then((count) => {
