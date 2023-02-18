@@ -62,16 +62,20 @@ client.on("messageCreate", async (message) => {
 
   try {
     // Get the conversation state for this user
-    const context = conversationState[message.author.id] || {};
+    const context = conversationState[message.author.id] || [];
+    const initPrompt = "You are a normal human being interacting with your peers:\n"
 
     // Call the OpenAI API to generate a response (text-davinci-003, text-curie-001, text-babbage-001, text-ada-001) (code-davinci-002, code-cushman-001)
     const response = await openai.createCompletion({
       model: "text-davinci-003",
-      prompt: userMessage,
+      prompt: initPrompt + context.slice(-3).join('\n') + (context.length > 0 ? '\n' : '') + userMessage + "\n",
       temperature: 0.5,
-      max_tokens: 150,
+      top_p: 0.3,
+      max_tokens: 2048,
       n: 1,
-      ...context, // Include the conversation state as additional context
+      best_of: 1,
+      presence_penalty: 0,
+      frequency_penalty: 0.5,
     });
 
     // Extract the response text from the API response
@@ -82,7 +86,7 @@ client.on("messageCreate", async (message) => {
     message.channel.send(botMessage);
 
     // Update the conversation state with any new context
-    conversationState[message.author.id] = response.context;
+    conversationState[message.author.id] = [...context.slice(-2), userMessage, botMessage];
   } catch (error) {
     message.channel.send('An error occurred while processing your request. Please try again later.');
     if (error.response) {
