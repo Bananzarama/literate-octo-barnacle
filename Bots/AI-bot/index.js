@@ -23,7 +23,10 @@ const prefix = '*';
 
 //vars for model and prompt
 global.ai_model = "text-davinci-003"
-var initPrompt = "You are a normal human being.\n";
+global.init_prompt = "You are a normal human being.";
+
+// Set up a conversation state object to store context
+const conversationState = {};
 
 // Winston Logger (error, combined(info), and CLI)
 const logger = winston.createLogger({
@@ -71,9 +74,7 @@ client.once("ready", async () => {
   client.user.setActivity(`Current Model: ${ai_model}`);
 });
 
-// Set up a conversation state object to store context
-const conversationState = {};
-
+// Checks all new chat messages for messages directed at bot
 client.on("messageCreate", async (message) => {
   // Ignore messages from bots and messages that don't start with the prefix
   if (message.author.bot || !message.content.startsWith(prefix)) {
@@ -82,17 +83,16 @@ client.on("messageCreate", async (message) => {
 
   // Parse the user's message and extract the text
   const userMessage = message.content.slice(prefix.length);
-  logger.info(`User: ${userMessage}`);
+  logger.info(`${message.author.username}#${message.author.discriminator}: ${userMessage}`);
 
   try {
     // Get the conversation state for this user
     const context = conversationState[message.author.id] || [];
 
-
     // Call the OpenAI API to generate a response
     var tokens = 1750;
     if (ai_model == "text-davinci-003") tokens = 3500;
-    var whole_prompt = initPrompt + context.slice(-3).join('\n') + (context.length > 0 ? '\n' : '') + userMessage + "\n";
+    var whole_prompt = init_prompt + "\n" + context.slice(-3).join('\n') + (context.length > 0 ? '\n' : '') + userMessage + "\n";
     const response = await openai.createCompletion({
       model: ai_model,
       prompt: whole_prompt,
@@ -107,12 +107,13 @@ client.on("messageCreate", async (message) => {
 
     // Extract the response text from the API response
     const botMessage = response.data.choices[0].text.trim();
-    const usedTokens = response.data.usage.total_tokens;
+    const promptTokens = response.data.usage.prompt_tokens;
+    const responseTokens = response.data.usage.completion_tokens;
 
     // Send the response to the user
     if (botMessage !== "") {
       try {
-        logger.info(`Bot: ${botMessage}\n   Tokens: ${usedTokens}`);
+        logger.info(`AI => ${message.author.username}#${message.author.discriminator}: ${botMessage}\n   Tokens: ${promptTokens}+${responseTokens}`);
         message.channel.send(botMessage);
       } catch (e) {
         logger.error(e);
@@ -142,7 +143,16 @@ client.on(Events.InteractionCreate, async interaction => {
   }
   try {
     await command.execute(interaction);
-    client.user.setActivity(`Current Model: ${ai_model}`);
+    const interactionUser = await interaction.guild.members.fetch(interaction.user.id)
+    logger.info(`Slash command used: ${interaction.commandName} by user: ${interactionUser.nickname}(${interactionUser.user.username}#${interactionUser.id})`)
+    // Individual logging for the time being. FIX: winston transports maybe
+    if (interaction.commandName == "swap-ai") {
+      client.user.setActivity(`Current Model: ${ai_model}`);
+      logger.info(`Ai model changed to: ${ai_model}`)
+    }
+    if (interaction.commandName == "prompt") {
+      logger.info(`Ai prompt changed to: ${init_prompt}`)
+    }
   } catch (error) {
     logger.error(error);
     await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });

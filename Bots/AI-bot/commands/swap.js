@@ -2,7 +2,7 @@ const { SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('swap')
+        .setName('swap-ai')
         .setDescription('Swap the current AI model for another!')
         .addStringOption(option =>
             option.setName('ai_model')
