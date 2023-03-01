@@ -91,8 +91,9 @@ client.on("messageCreate", async (message) => {
 
     // Call the OpenAI API to generate a response
     var tokens = 1750;
-    if (ai_model == "text-davinci-003") tokens = 3500;
+    if (ai_model == "text-davinci-003" || ai_model == "code-davinci-002") tokens = 3500;
     var whole_prompt = init_prompt + "\n" + context.slice(-3).join('\n') + (context.length > 0 ? '\n' : '') + userMessage + "\n";
+    if (ai_model.includes("code-")) whole_prompt = userMessage + "\n";
     const response = await openai.createCompletion({
       model: ai_model,
       prompt: whole_prompt,
@@ -144,14 +145,15 @@ client.on(Events.InteractionCreate, async interaction => {
   try {
     await command.execute(interaction);
     const interactionUser = await interaction.guild.members.fetch(interaction.user.id)
-    logger.info(`Slash command used: ${interaction.commandName} by user: ${interactionUser.nickname}(${interactionUser.user.username}#${interactionUser.id})`)
+    logger.info(`Slash command used: ${interaction.commandName} by user: ${interaction.member.nickname}(${interactionUser.user.tag})`)
     // Individual logging for the time being. FIX: winston transports maybe
     if (interaction.commandName == "swap-ai") {
       client.user.setActivity(`Current Model: ${ai_model}`);
-      logger.info(`Ai model changed to: ${ai_model}`)
+      logger.warn(`Ai model changed to: ${ai_model}`)
     }
     if (interaction.commandName == "prompt") {
-      logger.info(`Ai prompt changed to: ${init_prompt}`)
+      client.user.setActivity(`Current Model: ${ai_model}`);
+      logger.warn(`Ai prompt changed to: ${init_prompt}`)
     }
   } catch (error) {
     logger.error(error);
@@ -164,8 +166,14 @@ client.on('error', error => {
   logger.error(error);
   client.destroy();
   logger.warn('Bot Destroyed!');
-  client.login(DISCORD_BOT_TOKEN);
-  logger.warn('Bot Rebuilt!');
+  try {
+    client.login(DISCORD_BOT_TOKEN);
+    logger.info(`Logged in as ${client.user.tag}!`);
+    client.user.setActivity(`Current Model: ${ai_model}`);
+    logger.warn('Bot Rebuilt!');
+  } catch (error) {
+    logger.error(error);
+  }
 });
 
 client.login(DISCORD_BOT_TOKEN);
