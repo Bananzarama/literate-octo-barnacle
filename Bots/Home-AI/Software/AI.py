@@ -24,7 +24,7 @@ load_dotenv()
 
 
 class ChatWindow(QMainWindow):
-    model = "text-davinci-003"
+    model = "gpt-3.5-turbo"
     prompt = "You are a normal human."
     temp = 5
     top_p = 1
@@ -98,13 +98,19 @@ class ChatWindow(QMainWindow):
         self.chat_log.append(f"You: {message}")
         self.previous_messages.append(f"{message}")
         response = get_response_from_openai(self.previous_messages)
-        response_text = response.choices[0].text.strip()
+        if isinstance(response,openai.InvalidRequestError):
+            response_text = response
+        else:
+            if ChatWindow.model == "gpt-3.5-turbo":
+                response_text = response.choices[0].message.content.strip()
+            else:
+                response_text = response.choices[0].text.strip()
         self.chat_log.append(f"Bot: {response_text}")
         context = "\n".join(self.previous_messages)
         self.previous_messages.append(f"{response_text}")
         sent_parameters = {
             "model": ChatWindow.model,
-            "prompt": context,
+            "prompt": context + "\n",
             "temperature": ChatWindow.temp/10,
             "top_p": ChatWindow.top_p,
             "max_tokens": ChatWindow.max_tokens,
@@ -241,6 +247,7 @@ class SettingsWindow(QWidget):
 
         self.tab3_combobox = QComboBox()
         self.tab3_combobox.addItems([
+            "gpt-3.5-turbo",
             "text-davinci-003",
             "text-curie-001",
             "text-babbage-001",
@@ -355,20 +362,35 @@ def get_response_from_openai(previous_messages):
     # print(list)
 
     # Combine previous messages into prompt
-    context = "\n".join(previous_messages)
-
+    context = "\n".join(previous_messages) + "\n"
+    response = ""
     # Call OpenAI API to get response
-    response = openai.Completion.create(
-        model=ChatWindow.model,
-        prompt=context,
-        temperature=ChatWindow.temp/10,
-        top_p=ChatWindow.top_p,
-        max_tokens=ChatWindow.max_tokens,
-        n=ChatWindow.n,
-        best_of=ChatWindow.best_of,
-        presence_penalty=ChatWindow.presence_penalty/10,
-        frequency_penalty=ChatWindow.frequency_penalty/10,
-    )
+    try:
+        if ChatWindow.model == "gpt-3.5-turbo":
+            response = openai.ChatCompletion.create(
+                model= "gpt-3.5-turbo",
+                messages= [{"role": "user", "content": context}],
+                temperature=ChatWindow.temp/10,
+                top_p=ChatWindow.top_p,
+                max_tokens=ChatWindow.max_tokens,
+                n=ChatWindow.n,
+                presence_penalty=ChatWindow.presence_penalty/10,
+                frequency_penalty=ChatWindow.frequency_penalty/10,
+            )
+        else:
+            response = openai.Completion.create(
+                model=ChatWindow.model,
+                prompt=context,
+                temperature=ChatWindow.temp/10,
+                top_p=ChatWindow.top_p,
+                max_tokens=ChatWindow.max_tokens,
+                n=ChatWindow.n,
+                best_of=ChatWindow.best_of,
+                presence_penalty=ChatWindow.presence_penalty/10,
+                frequency_penalty=ChatWindow.frequency_penalty/10,
+            )
+    except Exception as e:
+        response = e
 
     return response
 
