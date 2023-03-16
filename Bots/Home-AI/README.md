@@ -15,8 +15,8 @@
 <details><summary>Software</summary>
 <p>
 
-- [AI](https://www.google.com/teapot)
-- [Display App](https://www.google.com/teapot)
+- [AI](https://platform.openai.com/docs/models/gpt-3-5)
+- [Display App](https://github.com/Bananzarama/literate-octo-barnacle/blob/main/Bots/Home-AI/Software/AI.py)
 </p>
 </details>
 

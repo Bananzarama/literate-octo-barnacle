@@ -9,6 +9,7 @@ module.exports = {
                 .setDescription('Options for AI Models')
                 .setRequired(true)
                 .addChoices(
+                    { name: "gpt-3.5-turbo", value: "gpt-3.5-turbo" },
                     { name: "text-davinci-003", value: "text-davinci-003" },
                     { name: "text-curie-001", value: "text-curie-001" },
                     { name: "text-babbage-001", value: "text-babbage-001" },

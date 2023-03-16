@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const winston = require('winston');
 const { combine, timestamp, printf, colorize, align } = winston.format;
-const { DISCORD_BOT_CLIENTID, DISCORD_BOT_TOKEN, DISCORD_BOT_AUTHOR, OPENAI_API_KEY } = require('./config.json');
+const { DISCORD_BOT_TOKEN, OPENAI_API_KEY } = require('./config.json');
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -22,11 +22,14 @@ const client = new Client({
 const prefix = '*';
 
 //vars for model and prompt
-global.ai_model = "text-davinci-003"
+global.ai_model = "gpt-3.5-turbo"
 global.init_prompt = "You are a normal human being.";
+global.context_mem = 3;
+global.message_mem = 10;
 
 // Set up a conversation state object to store context
-const conversationState = {};
+global.conversationStateComp = {};
+global.conversationStateChat = {};
 
 // Winston Logger (error, combined(info), and CLI)
 const logger = winston.createLogger({
@@ -41,8 +44,8 @@ const logger = winston.createLogger({
   ),
   defaultMeta: { service: 'AI-Bot-Discord' },
   transports: [
-    new winston.transports.File({ filename: 'error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'combined.log' }),
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'logs/combined.log' }),
     new winston.transports.Console(),
   ],
 });
@@ -87,30 +90,77 @@ client.on("messageCreate", async (message) => {
 
   try {
     // Get the conversation state for this user
-    const context = conversationState[message.author.id] || [];
+    const context = conversationStateComp[message.author.id] || [];
+    const message_context = conversationStateChat[message.author.id] || [];
 
     // Call the OpenAI API to generate a response
     var tokens = 1750;
-    if (ai_model == "text-davinci-003" || ai_model == "code-davinci-002") tokens = 3500;
-    var whole_prompt = init_prompt + "\n" + context.slice(-3).join('\n') + (context.length > 0 ? '\n' : '') + userMessage + "\n";
+    var response = "";
+    var init_message = {role: "system", content: init_prompt};
+    var user_message = {role: "user", content: userMessage};
+    var whole_message = []
+    whole_message.push(init_message);
+    if (message_context.length > 0) {
+      //logger.info(`pre-message state:${JSON.stringify(message_context)}`);
+      for (var i=0; i<message_context.length;i++) {
+        whole_message.push(message_context[i]);
+      }
+    }
+    whole_message.push(user_message);
+    //logger.info(`final message:${JSON.stringify(whole_message)}`);
+    if (ai_model == "text-davinci-003" || ai_model == "code-davinci-002" || ai_model == "gpt-3.5-turbo" || ai_model == "gpt-4") tokens = 3500;
+    var whole_prompt = init_prompt + "\n" + context.slice(-context_mem).join('\n') + (context.length > 0 ? '\n' : '') + userMessage + "\n";
     if (ai_model.includes("code-")) whole_prompt = userMessage + "\n";
-    const response = await openai.createCompletion({
-      model: ai_model,
-      prompt: whole_prompt,
-      temperature: 0.75,
-      top_p: 1,
-      max_tokens: 1500,
-      n: 1,
-      best_of: 1,
-      presence_penalty: 0.5,
-      frequency_penalty: 0.5,
-    });
+    if (ai_model == "gpt-3.5-turbo" || ai_model == "gpt-4") {
+      try {
+        response = await openai.createChatCompletion({
+          model: ai_model,
+          messages: whole_message,
+          temperature: 0.75,
+          top_p: 1,
+          max_tokens: tokens,
+          n: 1,
+          presence_penalty: 0.5,
+          frequency_penalty: 0.5,
+        });
+      } catch (e) {
+        logger.error(e);
+      }
+    } else {
+      try {
+        response = await openai.createCompletion({
+          model: ai_model,
+          prompt: whole_prompt,
+          temperature: 0.75,
+          top_p: 1,
+          max_tokens: tokens,
+          n: 1,
+          best_of: 1,
+          presence_penalty: 0.5,
+          frequency_penalty: 0.5,
+        });
+      } catch (e) {
+        logger.error(e);
+      }
+    }
 
     // Extract the response text from the API response
-    const botMessage = response.data.choices[0].text.trim();
-    const promptTokens = response.data.usage.prompt_tokens;
-    const responseTokens = response.data.usage.completion_tokens;
-
+    var botMessage, promptTokens, responseTokens
+    if (typeof response == openai.InvalidRequestError) {
+      botMessage = response.data
+      promptTokens = 0;
+      responseTokens = 0;
+    } else {
+      if (ai_model == "gpt-3.5-turbo" || ai_model == "gpt-4") {
+        botMessage = response.data.choices[0].message.content.trim();
+        promptTokens = response.data.usage.prompt_tokens;
+        responseTokens = response.data.usage.completion_tokens;
+      } else {
+        botMessage = response.data.choices[0].text.trim();
+        promptTokens = response.data.usage.prompt_tokens;
+        responseTokens = response.data.usage.completion_tokens;
+      }
+    }
     // Send the response to the user
     if (botMessage !== "") {
       try {
@@ -122,10 +172,13 @@ client.on("messageCreate", async (message) => {
     }
 
     // Update the conversation state with any new context
-    conversationState[message.author.id] = [...context.slice(-2), userMessage, botMessage];
+    conversationStateComp[message.author.id] = [...context.slice(-context_mem-1), userMessage, botMessage];
+    conversationStateChat[message.author.id] = [...message_context.slice(-message_mem-1), user_message, {role: "assistant", content: botMessage}];
+    //logger.info(`post-message state:${JSON.stringify(conversationStateChat[message.author.id])}`);
   } catch (error) {
     message.channel.send('An error occurred while processing your request. Please try again later.');
     if (error.response) {
+      logger.error(response.data)
       logger.error(`Error Code: ${error.response.status}`);
       logger.error(JSON.stringify(error.response.data, null, 4));
     } else {
