@@ -25,7 +25,7 @@ const prefix = '*';
 global.ai_model = "gpt-3.5-turbo"
 global.init_prompt = "You are a normal human being.";
 global.context_mem = 3;
-global.message_mem = 10;
+global.message_mem = 6;
 
 // Set up a conversation state object to store context
 global.conversationStateComp = {};
@@ -96,22 +96,22 @@ client.on("messageCreate", async (message) => {
     // Call the OpenAI API to generate a response
     var tokens = 1750;
     var response = "";
-    var init_message = {role: "system", content: init_prompt};
-    var user_message = {role: "user", content: userMessage};
-    var whole_message = []
-    whole_message.push(init_message);
-    if (message_context.length > 0) {
-      //logger.info(`pre-message state:${JSON.stringify(message_context)}`);
-      for (var i=0; i<message_context.length;i++) {
-        whole_message.push(message_context[i]);
-      }
-    }
-    whole_message.push(user_message);
-    //logger.info(`final message:${JSON.stringify(whole_message)}`);
+
     if (ai_model == "text-davinci-003" || ai_model == "code-davinci-002" || ai_model == "gpt-3.5-turbo" || ai_model == "gpt-4") tokens = 3500;
-    var whole_prompt = init_prompt + "\n" + context.slice(-context_mem).join('\n') + (context.length > 0 ? '\n' : '') + userMessage + "\n";
-    if (ai_model.includes("code-")) whole_prompt = userMessage + "\n";
+
     if (ai_model == "gpt-3.5-turbo" || ai_model == "gpt-4") {
+      var init_message = {role: "system", content: init_prompt};
+      var user_message = {role: "user", content: userMessage};
+      var whole_message = []
+      whole_message.push(init_message);
+      logger.warn(`pre-message state:${JSON.stringify(message_context)}`);
+      if (message_context.length > 0) {
+        for (var i=0; i<message_context.length;i++) {
+          whole_message.push(message_context[i]);
+        }
+      }
+      whole_message.push(user_message);
+      logger.warn(`final message:${JSON.stringify(whole_message)}`);
       try {
         response = await openai.createChatCompletion({
           model: ai_model,
@@ -127,6 +127,10 @@ client.on("messageCreate", async (message) => {
         logger.error(e);
       }
     } else {
+      logger.warn(`pre-completion state:${JSON.stringify(context)}`);
+      var whole_prompt = init_prompt + "\n" + context.slice(-context_mem).join('\n') + (context.length > 0 ? '\n' : '') + userMessage + "\n";
+      if (ai_model.includes("code-")) whole_prompt = userMessage + "\n";
+      logger.warn(`final completion:${JSON.stringify(whole_prompt)}`);
       try {
         response = await openai.createCompletion({
           model: ai_model,
@@ -172,9 +176,13 @@ client.on("messageCreate", async (message) => {
     }
 
     // Update the conversation state with any new context
-    conversationStateComp[message.author.id] = [...context.slice(-context_mem-1), userMessage, botMessage];
-    conversationStateChat[message.author.id] = [...message_context.slice(-message_mem-1), user_message, {role: "assistant", content: botMessage}];
-    //logger.info(`post-message state:${JSON.stringify(conversationStateChat[message.author.id])}`);
+    if (ai_model == "gpt-3.5-turbo" || ai_model == "gpt-4") {
+      conversationStateChat[message.author.id] = [...message_context.slice(-message_mem-1), user_message, {role: "assistant", content: botMessage}];
+    logger.warn(`post-message state:${JSON.stringify(conversationStateChat[message.author.id])}`);
+    } else {
+      conversationStateComp[message.author.id] = [...context.slice(-context_mem-1), userMessage, botMessage];
+      logger.warn(`post-completion state:${JSON.stringify(conversationStateComp[message.author.id])}`);
+    }
   } catch (error) {
     message.channel.send('An error occurred while processing your request. Please try again later.');
     if (error.response) {
