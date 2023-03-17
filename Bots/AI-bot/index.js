@@ -23,9 +23,9 @@ const prefix = '*';
 
 //vars for model and prompt
 global.ai_model = "gpt-3.5-turbo"
-global.init_prompt = "You are a normal human being.";
+global.init_prompt = "You are a helpful, pattern-following assistant.";
 global.context_mem = 3;
-global.message_mem = 6;
+global.message_mem = 10;
 
 // Set up a conversation state object to store context
 global.conversationStateComp = {};
@@ -116,7 +116,7 @@ client.on("messageCreate", async (message) => {
         response = await openai.createChatCompletion({
           model: ai_model,
           messages: whole_message,
-          temperature: 0.75,
+          temperature: 0,
           top_p: 1,
           max_tokens: tokens,
           n: 1,
@@ -150,17 +150,17 @@ client.on("messageCreate", async (message) => {
 
     // Extract the response text from the API response
     var botMessage, promptTokens, responseTokens
-    if (typeof response == openai.InvalidRequestError) {
+    if (typeof response.data == openai.InvalidRequestError) {
       botMessage = response.data
       promptTokens = 0;
       responseTokens = 0;
     } else {
       if (ai_model == "gpt-3.5-turbo" || ai_model == "gpt-4") {
-        botMessage = response.data.choices[0].message.content.trim();
+        botMessage = response.data.choices[0]?.message.content.trim();
         promptTokens = response.data.usage.prompt_tokens;
         responseTokens = response.data.usage.completion_tokens;
       } else {
-        botMessage = response.data.choices[0].text.trim();
+        botMessage = response.data.choices[0]?.text.trim();
         promptTokens = response.data.usage.prompt_tokens;
         responseTokens = response.data.usage.completion_tokens;
       }
@@ -205,16 +205,19 @@ client.on(Events.InteractionCreate, async interaction => {
   }
   try {
     await command.execute(interaction);
-    const interactionUser = await interaction.guild.members.fetch(interaction.user.id)
-    logger.info(`Slash command used: ${interaction.commandName} by user: ${interaction.member.nickname}(${interactionUser.user.tag})`)
+    const interactionUser = await interaction.guild.members.fetch(interaction.user.id);
+    logger.info(`Slash command used: ${interaction.commandName} by user: ${interaction.member.nickname}(${interactionUser.user.tag})`);
     // Individual logging for the time being. FIX: winston transports maybe
     if (interaction.commandName == "swap-ai") {
-      client.user.setActivity(`Current Model: ${ai_model}`);
-      logger.warn(`Ai model changed to: ${ai_model}`)
+      client.user.setActivity(`Current Model: ${ai_model}`);;
+      logger.warn(`Ai model changed to: ${ai_model}`);
     }
     if (interaction.commandName == "prompt") {
-      client.user.setActivity(`Current Model: ${ai_model}`);
-      logger.warn(`Ai prompt changed to: ${init_prompt}`)
+      logger.warn(`Ai prompt changed to: ${init_prompt}`);
+    }
+    if (interaction.commandName == "reset") {
+      conversationStateChat[interaction.user.id] = [];
+      logger.warn(`${interaction.member.nickname} reset their chat history`);
     }
   } catch (error) {
     logger.error(error);
