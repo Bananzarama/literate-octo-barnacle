@@ -156,11 +156,11 @@ client.on("messageCreate", async (message) => {
       responseTokens = 0;
     } else {
       if (ai_model == "gpt-3.5-turbo" || ai_model == "gpt-4") {
-        botMessage = response.data.choices[0]?.message.content.trim();
+        botMessage = response.data?.choices[0]?.message.content.trim();
         promptTokens = response.data.usage.prompt_tokens;
         responseTokens = response.data.usage.completion_tokens;
       } else {
-        botMessage = response.data.choices[0]?.text.trim();
+        botMessage = response.data?.choices[0]?.text.trim();
         promptTokens = response.data.usage.prompt_tokens;
         responseTokens = response.data.usage.completion_tokens;
       }

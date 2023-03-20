@@ -2,7 +2,6 @@ import os
 import sys
 import openai
 import json
-from collections import deque
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QApplication,
@@ -25,7 +24,7 @@ load_dotenv()
 
 class ChatWindow(QMainWindow):
     model = "gpt-3.5-turbo"
-    prompt = "You are a normal human."
+    prompt = "You are a helpful, pattern-following assistant."
     temp = 5
     top_p = 1
     max_tokens = 500
@@ -37,11 +36,12 @@ class ChatWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.previous_messages = deque(maxlen=10)
+        self.previous_context = []
+        self.previous_messages = [{"role": "system", "content": ChatWindow.prompt}]
         self.initUI()
 
     def initUI(self):
-        self.previous_messages.append(ChatWindow.prompt)
+        self.previous_context.append(ChatWindow.prompt)
         self.chat_log = QTextEdit()
         self.chat_log.setReadOnly(True)
         self.chat_log.setFont(QFont('Arial', 14))
@@ -96,33 +96,55 @@ class ChatWindow(QMainWindow):
     def on_send_button_click(self):
         message = self.input_field.toPlainText()
         self.chat_log.append(f"You: {message}")
-        self.previous_messages.append(f"{message}")
-        response = get_response_from_openai(self.previous_messages)
-        if isinstance(response,openai.InvalidRequestError):
-            response_text = response
-        else:
-            if ChatWindow.model == "gpt-3.5-turbo":
-                response_text = response.choices[0].message.content.strip()
+        if ChatWindow.model == "gpt-3.5-turbo" or ChatWindow.model == "gpt-4":
+            response = get_response_from_openai(self.previous_messages)
+            if isinstance(response,openai.InvalidRequestError) or isinstance(response,TypeError):
+                response_text = response
             else:
+                self.previous_messages.append({"role": "user", "content": message})
+                response_text = response.choices[0].message['content'].strip()
+                self.previous_messages.append({"role": "assistant", "content": response_text})
+                self.chat_log.append(f"Bot: {response_text}")
+                sent_parameters = {
+                    "model": ChatWindow.model,
+                    "messages": self.previous_messages,
+                    "temperature": ChatWindow.temp/10,
+                    "top_p": ChatWindow.top_p,
+                    "max_tokens": ChatWindow.max_tokens,
+                    "n": ChatWindow.n,
+                    "presence_penalty": ChatWindow.presence_penalty/10,
+                    "frequency_penalty": ChatWindow.frequency_penalty/10,
+                }
+                self.log_window.log_window.append(
+                    f"Sent#{ChatWindow.count}: {json.dumps(sent_parameters, indent=4)}")
+            self.log_window.log_window.append(
+                f"Response#{ChatWindow.count}: {response}")
+        else:
+            response = get_response_from_openai(self.previous_context)
+            if isinstance(response,openai.InvalidRequestError) or isinstance(response,TypeError):
+                response_text = response
+            else:
+                self.previous_context.append(f"{message}")
                 response_text = response.choices[0].text.strip()
-        self.chat_log.append(f"Bot: {response_text}")
-        context = "\n".join(self.previous_messages)
-        self.previous_messages.append(f"{response_text}")
-        sent_parameters = {
-            "model": ChatWindow.model,
-            "prompt": context + "\n",
-            "temperature": ChatWindow.temp/10,
-            "top_p": ChatWindow.top_p,
-            "max_tokens": ChatWindow.max_tokens,
-            "n": ChatWindow.n,
-            "best_of": ChatWindow.best_of,
-            "presence_penalty": ChatWindow.presence_penalty/10,
-            "frequency_penalty": ChatWindow.frequency_penalty/10,
-        }
-        self.log_window.log_window.append(
-            f"Sent#{ChatWindow.count}: {json.dumps(sent_parameters, indent=4)}")
-        self.log_window.log_window.append(
-            f"Response#{ChatWindow.count}: {response}")
+                self.chat_log.append(f"Bot: {response_text}")
+                context = ChatWindow.prompt + "\n".join(self.previous_context)
+                self.previous_context.append(f"{response_text}")
+                sent_parameters = {
+                    "model": ChatWindow.model,
+                    "prompt": context + "\n",
+                    "temperature": ChatWindow.temp/10,
+                    "top_p": ChatWindow.top_p,
+                    "max_tokens": ChatWindow.max_tokens,
+                    "n": ChatWindow.n,
+                    "best_of": ChatWindow.best_of,
+                    "presence_penalty": ChatWindow.presence_penalty/10,
+                    "frequency_penalty": ChatWindow.frequency_penalty/10,
+                }
+                self.log_window.log_window.append(
+                    f"Sent#{ChatWindow.count}: {json.dumps(sent_parameters, indent=4)}")
+            self.log_window.log_window.append(
+                f"Response#{ChatWindow.count}: {response}")
+            
         ChatWindow.count += 1
         self.input_field.clear()
 
@@ -131,8 +153,12 @@ class ChatWindow(QMainWindow):
 
     def reset_chat_window(self):
         self.chat_log.clear()
-        self.previous_messages.clear()
-        self.previous_messages.append(ChatWindow.prompt)
+        if ChatWindow.model == "gpt-3.5-turbo" or ChatWindow.model == "gpt-4":
+            self.previous_messages.clear()
+            self.previous_messages.append({"role": "system", "content": ChatWindow.prompt})
+        else:
+            self.previous_context.clear()
+            self.previous_context.append(ChatWindow.prompt)
         ChatWindow.count = 1
 
     def open_help_window(self):
@@ -340,36 +366,34 @@ class LogWindow(QWidget):
         self.toolbar = QToolBar()
         self.toolbar.setMovable(False)
         self.toolbar.setFixedHeight(20)
-        self.reset_action = QAction("Reset", self)
-        self.toolbar.addAction(self.reset_action)
-        self.reset_action.triggered.connect(self.reset_log_window)
+        self.clear_action = QAction("Clear", self)
+        self.toolbar.addAction(self.clear_action)
+        self.clear_action.triggered.connect(self.clear_log_window)
 
         self.vbox.addWidget(self.toolbar)
         self.vbox.addWidget(self.log_window)
         self.setLayout(self.vbox)
 
-    def reset_log_window(self):
+    def clear_log_window(self):
         self.log_window.clear()
 
 
 def get_response_from_openai(previous_messages):
     # Set up OpenAI API authentication
     openai.api_key = os.environ.get("open-ai-token")
+    response = ""
     # models = openai.Model.list()["data"]
     # list = []
     # for i in range(0,len(models)):
     #    list.append(models[i]["id"])
     # print(list)
-
-    # Combine previous messages into prompt
-    context = "\n".join(previous_messages) + "\n"
-    response = ""
     # Call OpenAI API to get response
+
     try:
-        if ChatWindow.model == "gpt-3.5-turbo":
+        if ChatWindow.model == "gpt-3.5-turbo" or "gpt-4":
             response = openai.ChatCompletion.create(
-                model= "gpt-3.5-turbo",
-                messages= [{"role": "user", "content": context}],
+                model= ChatWindow.model,
+                messages= previous_messages,
                 temperature=ChatWindow.temp/10,
                 top_p=ChatWindow.top_p,
                 max_tokens=ChatWindow.max_tokens,
@@ -380,7 +404,7 @@ def get_response_from_openai(previous_messages):
         else:
             response = openai.Completion.create(
                 model=ChatWindow.model,
-                prompt=context,
+                prompt=ChatWindow.prompt + "\n".join(previous_messages),
                 temperature=ChatWindow.temp/10,
                 top_p=ChatWindow.top_p,
                 max_tokens=ChatWindow.max_tokens,

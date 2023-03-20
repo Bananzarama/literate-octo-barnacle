@@ -1,0 +1,2 @@
+#openai bot for discord
+
