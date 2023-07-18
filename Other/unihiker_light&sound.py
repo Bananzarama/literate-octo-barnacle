@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
-
-
-# -*- coding: UTF-8 -*-
 import time
 from pinpong.board import *
 from pinpong.extension.unihiker import *
@@ -35,7 +31,7 @@ def lighting_change():
     light_level = light.read() 
     light_perc = int(light_level/light_max * 100)
     light_text.config(text=str(light_perc) + "%") 
-    light_bar.config(x0=20, x1=light_perc/100 * 200)
+    light_bar.config(x0=20, x1=20+(light_perc/100 * 200))
     #print("light level:", str(light_perc) + "%")
     if 0 <= light_level < light_max/4:
         light_bar.config(color=red_bar) 
@@ -47,7 +43,7 @@ def lighting_change():
 def sound_change():
     sound_db = int(audio.sound_level())
     sound_text.config(text=str(sound_db) + "db")
-    sound_bar.config(x0=20, x1=int(sound_db/sound_max * 100)/100 * 200)
+    sound_bar.config(x0=20, x1=20+(sound_db/sound_max * 200))
     #print("sound level:", str(sound_db) + "db")
     if 0 <= sound_db < sound_max/4:
         sound_bar.config(color=red_bar) 
@@ -60,10 +56,3 @@ while True:
     lighting_change()
     sound_change()
     time.sleep(.1) 
-
-
-# In[ ]:
-
-
-
-
