@@ -28,7 +28,7 @@ def say(text):
     try:
         audio = elevenlabs.generate(
             text=text,
-            voice="Trucrime",
+            voice="Bella",
             model="eleven_monolingual_v1",
         )
         print(color.blue + "Attempting Playback" + color.end)
