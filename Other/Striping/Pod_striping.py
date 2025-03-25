@@ -134,5 +134,5 @@ def new_pod_striping(pod_base=None,parent_pod=None,pod_numbers=32,pod_name_base=
             tapi.pod_state_change(pod_id=pod,state='ONLINE')
 
 if __name__ == '__main__':
-     new_pod_striping(pod_base=19000,parent_pod=119,pod_name_base="IOT_RaspberryPi_Pod-%02d",replacement=True)
+     new_pod_striping(pod_base=19000,parent_pod=119,pod_name_base="IOT_RaspberryPi_Pod-%02d",replacement=False)
      print("done")
